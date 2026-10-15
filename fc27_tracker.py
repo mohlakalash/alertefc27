@@ -3,7 +3,7 @@ import requests
 from playwright.sync_api import sync_playwright
 
 # --- VOTRE CANAL NTFY ---
-SUJET_NTFY = "alertefc27_8906612"  # Mettez ici le nom EXACT de votre canal dans l'appli ntfy
+SUJET_NTFY = "alertefc27_8906612"
 
 URL_PRODUIT = "https://www.allkeyshop.com/blog/buy-ea-sports-fc-27-steam-account-compare-prices/"
 
@@ -25,7 +25,7 @@ def extraire_meilleur_prix():
         )
         page = context.new_page()
         page.goto(URL_PRODUIT, wait_until="domcontentloaded", timeout=45000)
-        page.wait_for_timeout(6000)  # Attend 6s que le tableau des prix JavaScript s'affiche
+        page.wait_for_timeout(6000)
         
         html = page.content()
         texte = page.inner_text("body")
@@ -59,8 +59,9 @@ if __name__ == "__main__":
     prix = extraire_meilleur_prix()
     if prix:
         print(f"✅ Prix le moins cher relevé : {prix:.2f} €")
+        # Utilisation de "EUR" dans le titre pour éviter l'erreur UnicodeEncodeError
         envoyer_ntfy(
-            f"FC 27 : {prix:.2f} €",
+            f"FC 27 : {prix:.2f} EUR",
             f"Prix le moins cher actuel : {prix:.2f} €\n{URL_PRODUIT}"
         )
     else:
