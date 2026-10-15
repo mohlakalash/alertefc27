@@ -8,6 +8,8 @@ on:
 jobs:
   verifier_prix:
     runs-on: ubuntu-latest
+    env:
+      EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Recuperer les fichiers
         uses: actions/checkout@v4
@@ -17,8 +19,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Installer les outils web
-        run: pip install requests beautifulsoup4
+      - name: Installer le navigateur Playwright
+        run: |
+          pip install playwright requests beautifulsoup4
+          playwright install chromium --with-deps
 
       - name: Lancer le script de prix
         run: python fc27_tracker.py
