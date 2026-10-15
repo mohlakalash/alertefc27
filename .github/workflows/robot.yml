@@ -8,8 +8,6 @@ on:
 jobs:
   verifier_prix:
     runs-on: ubuntu-latest
-    env:
-      EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Recuperer les fichiers
         uses: actions/checkout@v4
@@ -25,4 +23,7 @@ jobs:
           playwright install chromium --with-deps
 
       - name: Lancer le script de prix
+        env:
+          EMAIL_ADRESSE: ${{ secrets.EMAIL_ADRESSE }}
+          EMAIL_MDP: ${{ secrets.EMAIL_MDP }}
         run: python fc27_tracker.py
