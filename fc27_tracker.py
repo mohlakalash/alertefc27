@@ -3,7 +3,7 @@ import requests
 from playwright.sync_api import sync_playwright
 
 # --- VOTRE CANAL NTFY ---
-SUJET_NTFY = "alertefc27"  # Mettez ici le nom EXACT de votre canal dans l'appli ntfy
+SUJET_NTFY = "alertefc27_8906612"  # Mettez ici le nom EXACT de votre canal dans l'appli ntfy
 
 URL_PRODUIT = "https://www.allkeyshop.com/blog/buy-ea-sports-fc-27-steam-account-compare-prices/"
 
