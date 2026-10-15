@@ -1,20 +1,32 @@
+import os
 import re
-import requests
+import smtplib
+from email.message import EmailMessage
 from playwright.sync_api import sync_playwright
 
-# --- VOTRE CANAL NTFY ---
-SUJET_NTFY = "alertefc27_8906612"
-
+EMAIL_ADRESSE = os.environ.get("EMAIL_ADRESSE")
+EMAIL_MDP = os.environ.get("EMAIL_MDP")
 URL_PRODUIT = "https://www.allkeyshop.com/blog/buy-ea-sports-fc-27-steam-account-compare-prices/"
 
-def envoyer_ntfy(titre, message):
-    url = f"https://ntfy.sh/{SUJET_NTFY.strip()}"
-    r = requests.post(
-        url,
-        data=message.encode("utf-8"),
-        headers={"Title": titre, "Priority": "default"}
+def envoyer_email(prix):
+    if not EMAIL_ADRESSE or not EMAIL_MDP:
+        print("⚠️ Erreur : EMAIL_ADRESSE ou EMAIL_MDP manquant dans Settings > Secrets.")
+        return
+
+    msg = EmailMessage()
+    msg["Subject"] = f"⚽ FC 27 : {prix:.2f} EUR (Meilleur prix actuel)"
+    msg["From"] = EMAIL_ADRESSE.strip()
+    msg["To"] = EMAIL_ADRESSE.strip()
+    msg.set_content(
+        f"Bonjour,\n\n"
+        f"Le prix le moins cher actuel pour EA SPORTS FC 27 (Compte Steam) est de : {prix:.2f} €\n\n"
+        f"Lien direct vers l'offre :\n{URL_PRODUIT}"
     )
-    print(f"Notification envoyée (Statut HTTP : {r.status_code})")
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(EMAIL_ADRESSE.strip(), EMAIL_MDP.replace(" ", "").strip())
+        smtp.send_message(msg)
+    print(f"📧 E-mail envoyé avec succès à {EMAIL_ADRESSE} !")
 
 def extraire_meilleur_prix():
     with sync_playwright() as p:
@@ -59,10 +71,6 @@ if __name__ == "__main__":
     prix = extraire_meilleur_prix()
     if prix:
         print(f"✅ Prix le moins cher relevé : {prix:.2f} €")
-        # Utilisation de "EUR" dans le titre pour éviter l'erreur UnicodeEncodeError
-        envoyer_ntfy(
-            f"FC 27 : {prix:.2f} EUR",
-            f"Prix le moins cher actuel : {prix:.2f} €\n{URL_PRODUIT}"
-        )
+        envoyer_email(prix)
     else:
         print("⚠️ Aucun prix détecté sur la page.")
