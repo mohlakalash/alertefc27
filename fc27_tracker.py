@@ -37,11 +37,16 @@ def envoyer_email(prix_fc27, prix_mw4):
     print(f"📧 E-mail envoyé avec succès à {EMAIL_ADRESSE} !")
 
 def analyser_page(page, url):
-    page.goto(url, wait_until="domcontentloaded", timeout=45000)
-    page.wait_for_timeout(6000)
-    
-    html = page.content()
-    texte = page.inner_text("body")
+    try:
+        # "commit" évite le blocage de 45s causé par les scripts publicitaires tiers
+        page.goto(url, wait_until="commit", timeout=60000)
+        page.wait_for_timeout(8000)
+        
+        html = page.content()
+        texte = page.inner_text("body")
+    except Exception as e:
+        print(f"⚠️ Temps d'attente dépassé ou erreur sur {url} : {e}")
+        return None
 
     if "MERCHANT" in texte:
         texte = texte.split("MERCHANT", 1)[1]
