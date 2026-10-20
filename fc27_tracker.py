@@ -36,17 +36,28 @@ def envoyer_email(prix_fc27, prix_mw4):
         smtp.send_message(msg)
     print(f"📧 E-mail envoyé avec succès à {EMAIL_ADRESSE} !")
 
-def analyser_page(page, url):
-    try:
-        # "commit" évite le blocage de 45s causé par les scripts publicitaires tiers
-        page.goto(url, wait_until="commit", timeout=60000)
-        page.wait_for_timeout(8000)
-        
-        html = page.content()
-        texte = page.inner_text("body")
-    except Exception as e:
-        print(f"⚠️ Temps d'attente dépassé ou erreur sur {url} : {e}")
-        return None
+def analyser_page(context, url):
+    # On tente jusqu'à 2 fois par page en cas de blocage passager du serveur
+    for tentative in range(1, 3):
+        page = context.new_page()
+        try:
+            # On bloque les images, polices et médias lourds pour accélérer le chargement
+            page.route("**/*", lambda route: route.abort() 
+                       if route.request.resource_type in ["image", "media", "font"] 
+                       else route.continue_())
+
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(6000)
+            
+            html = page.content()
+            texte = page.inner_text("body")
+            page.close()
+            break
+        except Exception as e:
+            print(f"⚠️ Essai {tentative}/2 échoué sur {url} : {e}")
+            page.close()
+            if tentative == 2:
+                return None
 
     if "MERCHANT" in texte:
         texte = texte.split("MERCHANT", 1)[1]
@@ -79,10 +90,9 @@ def extraire_tous_les_prix():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             locale="fr-FR"
         )
-        page = context.new_page()
         
-        prix_fc27 = analyser_page(page, URL_FC27)
-        prix_mw4 = analyser_page(page, URL_MW4)
+        prix_fc27 = analyser_page(context, URL_FC27)
+        prix_mw4 = analyser_page(context, URL_MW4)
         
         browser.close()
         
