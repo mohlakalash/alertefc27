@@ -66,16 +66,30 @@ def extraire_meilleur_prix():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             locale="fr-FR"
         )
-        page = context.new_page()
-        try:
-            page.goto(URL_PRODUIT, wait_until="commit", timeout=60000)
-            page.wait_for_timeout(8000)
-            html = page.content()
-            texte = page.inner_text("body")
-        except Exception as e:
-            print(f"⚠️ Temps d'attente dépassé ou erreur : {e}")
-            browser.close()
-            return None
+        
+        # On tente jusqu'à 2 fois en cas de ralentissement passager
+        for tentative in range(1, 3):
+            page = context.new_page()
+            try:
+                # Bloque les images et pubs pour charger la page instantanément
+                page.route("**/*", lambda route: route.abort() 
+                           if route.request.resource_type in ["image", "media", "font"] 
+                           else route.continue_())
+
+                page.goto(URL_PRODUIT, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(6000)
+                
+                html = page.content()
+                texte = page.inner_text("body")
+                page.close()
+                break
+            except Exception as e:
+                print(f"⚠️ Essai {tentative}/2 échoué sur MW4 : {e}")
+                page.close()
+                if tentative == 2:
+                    browser.close()
+                    return None
+
         browser.close()
 
     if "MERCHANT" in texte:
@@ -122,7 +136,7 @@ def gerer_memoire_et_envoi(prix):
         donnees = {"heure_ref": heure_actuelle, "releves": []}
     else:
         donnees["releves"].append({"heure": heure_minute, "prix": prix})
-        print(f"📝 Prix mémorisé ({len(donnees['releves'])}/12 pour l'heure en cours). Prochain mail au changement d'heure.")
+        print(f"📝 Prix MW4 mémorisé ({len(donnees['releves'])}/12 pour l'heure en cours).")
 
     with open(FICHIER_MEMOIRE, "w", encoding="utf-8") as f:
         json.dump(donnees, f)
@@ -131,11 +145,9 @@ if __name__ == "__main__":
     prix = extraire_meilleur_prix()
     if prix:
         print(f"✅ Prix MW4 relevé : {prix:.2f} €")
-        # 1. Vérification immédiate pour l'appel Telegram (toutes les 5 min)
         if prix <= SEUIL_APPEL:
             print(f"🚨 Seuil atteint ({prix:.2f} € <= {SEUIL_APPEL:.2f} €) ! Appel Telegram immédiat...")
             passer_appel_telegram(prix)
-        # 2. Enregistrement pour l'e-mail récapitulatif (1 fois par heure)
         gerer_memoire_et_envoi(prix)
     else:
         print("⚠️ Aucun prix détecté sur la page MW4.")
