@@ -2,7 +2,6 @@ import os
 import re
 import json
 import smtplib
-import urllib.parse
 import requests
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
@@ -10,10 +9,11 @@ from playwright.sync_api import sync_playwright
 
 EMAIL_ADRESSE = os.environ.get("EMAIL_ADRESSE")
 EMAIL_MDP = os.environ.get("EMAIL_MDP")
-TELEGRAM_USER = os.environ.get("TELEGRAM_USER")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 URL_PRODUIT = "https://www.allkeyshop.com/blog/buy-ea-sports-fc-27-steam-account-compare-prices/"
-SEUIL_APPEL = 30.00  # 📞 Déclenche l'appel Telegram immédiatement si le prix est <= à ce montant
+SEUIL_APPEL = 30.00  # 📞 Déclenche le message Telegram immédiatement si le prix est <= à ce montant
 FICHIER_MEMOIRE = "memoire_fc27.json"
 
 def envoyer_email_recap(prix_min, releves):
@@ -40,24 +40,26 @@ def envoyer_email_recap(prix_min, releves):
         smtp.send_message(msg)
     print(f"📧 E-mail récapitulatif horaire FC 27 envoyé (Min : {prix_min:.2f} €) !")
 
-def passer_appel_telegram(prix):
-    if not TELEGRAM_USER:
-        print("⚠️ TELEGRAM_USER non configuré dans les Secrets.")
+def envoyer_message_telegram(prix, nom_jeu):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID manquant dans les Secrets.")
         return
 
-    user = TELEGRAM_USER.strip()
-    if not user.startswith("@"):
-        user = "@" + user
-
-    message = f"Alerte prix ! Le jeu EA Sports FC 27 est descendu à {prix:.2f} euros."
-    texte_encode = urllib.parse.quote(message)
-    url_appel = f"http://api.callmebot.com/start.php?user={user}&text={texte_encode}&lang=fr-FR-Standard-A&rpt=2"
+    message = f"🚨 Alerte prix ! Le jeu {nom_jeu} est descendu à {prix:.2f} euros.\n\nLien direct :\n{URL_PRODUIT}"
+    url_api = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }
 
     try:
-        requests.get(url_appel, timeout=15)
-        print(f"📞 Appel Telegram déclenché vers {user} !")
+        reponse = requests.post(url_api, json=payload, timeout=15)
+        if reponse.status_code == 200:
+            print(f"📱 Message Telegram officiel envoyé avec succès pour {nom_jeu} !")
+        else:
+            print(f"⚠️ Erreur Telegram : {reponse.text}")
     except Exception as e:
-        print(f"⚠️ Erreur lors de l'appel Telegram : {e}")
+        print(f"⚠️ Erreur lors de l'envoi Telegram : {e}")
 
 def extraire_meilleur_prix():
     with sync_playwright() as p:
@@ -103,7 +105,6 @@ def extraire_meilleur_prix():
     return min(prix_trouves) if prix_trouves else None
 
 def gerer_memoire_et_envoi(prix):
-    # Fuseau horaire France (UTC+2 / UTC+1)
     maintenant = datetime.now(timezone(timedelta(hours=2)))
     heure_actuelle = maintenant.strftime("%Y-%m-%d %H:00")
     heure_minute = maintenant.strftime("%H:%M")
@@ -116,12 +117,10 @@ def gerer_memoire_et_envoi(prix):
         except Exception:
             pass
 
-    # Si on a changé d'heure (ou atteint 12 relevés) et qu'on a des prix en mémoire, on envoie le récap !
     if (donnees["heure_ref"] != heure_actuelle or len(donnees["releves"]) >= 12) and donnees["releves"]:
          donnees["releves"].append({"heure": heure_minute, "prix": prix})
          prix_min = min(r["prix"] for r in donnees["releves"])
          envoyer_email_recap(prix_min, donnees["releves"])
-         # On réinitialise la mémoire pour la nouvelle heure qui commence
          donnees = {"heure_ref": heure_actuelle, "releves": []}
     else:
         donnees["releves"].append({"heure": heure_minute, "prix": prix})
@@ -134,11 +133,9 @@ if __name__ == "__main__":
     prix = extraire_meilleur_prix()
     if prix:
         print(f"✅ Prix FC 27 relevé : {prix:.2f} €")
-        # 1. Vérification immédiate pour l'appel Telegram (toutes les 5 min)
         if prix <= SEUIL_APPEL:
-            print(f"🚨 Seuil atteint ({prix:.2f} € <= {SEUIL_APPEL:.2f} €) ! Appel Telegram immédiat...")
-            passer_appel_telegram(prix)
-        # 2. Enregistrement pour l'e-mail récapitulatif (1 fois par heure)
+            print(f"🚨 Seuil atteint ({prix:.2f} € <= {SEUIL_APPEL:.2f} €) ! Message Telegram immédiat...")
+            envoyer_message_telegram(prix, "EA Sports FC 27")
         gerer_memoire_et_envoi(prix)
     else:
         print("⚠️ Aucun prix détecté sur la page FC 27.")
