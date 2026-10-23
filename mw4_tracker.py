@@ -6,7 +6,6 @@ import urllib.parse
 import requests
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
-from bs4 import BeautifulSoup
 
 EMAIL_ADRESSE = os.environ.get("EMAIL_ADRESSE")
 EMAIL_MDP = os.environ.get("EMAIL_MDP")
@@ -74,7 +73,6 @@ def extraire_meilleur_prix():
         print(f"⚠️ Erreur de connexion sur MW4 : {e}")
         return None
 
-    # Recherche de tous les prix affichés sous forme décimale avec le symbole euro ou dans le texte
     prix_trouves = []
     for m in re.finditer(r'(\d+[\.,]\d{2})\s*€', html):
         val = float(m.group(1).replace(",", "."))
