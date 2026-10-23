@@ -6,7 +6,7 @@ import urllib.parse
 import requests
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
-from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
 
 EMAIL_ADRESSE = os.environ.get("EMAIL_ADRESSE")
 EMAIL_MDP = os.environ.get("EMAIL_MDP")
@@ -58,51 +58,28 @@ def passer_appel_telegram(prix):
         print(f"📞 Appel Telegram déclenché vers {user} !")
     except Exception as e:
         print(f"⚠️ Erreur lors de l'appel Telegram : {e}")
-        
+
 def extraire_meilleur_prix():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-            locale="fr-FR"
-        )
-        page = context.new_page()
-        try:
-            page.goto(URL_PRODUIT, wait_until="load", timeout=45000)
-        except Exception:
-            try:
-                page.goto(URL_PRODUIT, wait_until="commit", timeout=30000)
-            except Exception as e:
-                print(f"⚠️ Erreur critique de chargement sur MW4 : {e}")
-                browser.close()
-                return None
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        "Accept-Language": "fr-FR,fr;q=0.9"
+    }
+    try:
+        response = requests.get(URL_PRODUIT, headers=headers, timeout=20)
+        if response.status_code != 200:
+            print(f"⚠️ Erreur HTTP {response.status_code} sur MW4")
+            return None
+        html = response.text
+    except Exception as e:
+        print(f"⚠️ Erreur de connexion sur MW4 : {e}")
+        return None
 
-        page.wait_for_timeout(5000)
-        html = page.content()
-        texte = page.inner_text("body")
-        browser.close()
-
-    if "MERCHANT" in texte:
-        texte = texte.split("MERCHANT", 1)[1]
-    for fin in ["Show all offers", "Historical Lowest Prices", "TOP 50"]:
-        if fin in texte:
-            texte = texte.split(fin, 1)[0]
-
+    # Recherche de tous les prix affichés sous forme décimale avec le symbole euro ou dans le texte
     prix_trouves = []
-    for ligne in texte.split("\n"):
-        ligne = ligne.strip()
-        if not ligne.startswith("+"):
-            m = re.search(r'^(\d+[\.,]\d{2})\s*(?:€|\$|EUR|USD)?$', ligne)
-            if m:
-                val = float(m.group(1).replace(",", "."))
-                if 12.0 <= val <= 150.0:
-                    prix_trouves.append(val)
-
-    if not prix_trouves:
-        for m in re.finditer(r'(\d{2}[\.,]\d{2})\s*€', html):
-            val = float(m.group(1).replace(",", "."))
-            if 12.0 <= val <= 150.0:
-                prix_trouves.append(val)
+    for m in re.finditer(r'(\d+[\.,]\d{2})\s*€', html):
+        val = float(m.group(1).replace(",", "."))
+        if 12.0 <= val <= 150.0:
+            prix_trouves.append(val)
 
     return min(prix_trouves) if prix_trouves else None
 
