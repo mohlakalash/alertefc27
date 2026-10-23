@@ -1,15 +1,16 @@
-name: Surveillance Prix FC27
+name: Surveillance Prix FC27 et MW4
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch: # INDISPENSABLE pour être déclenché de l'extérieur
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   verifier_prix:
     runs-on: ubuntu-latest
     steps:
-      - name: Recuperer le fichiers
+      - name: Recuperer les fichiers
         uses: actions/checkout@v4
 
       - name: Installer Python
@@ -19,11 +20,26 @@ jobs:
 
       - name: Installer le navigateur Playwright
         run: |
-          pip install playwright requests beautifulsoup4
+          pip install playwright requests
           playwright install chromium --with-deps
 
-      - name: Lancer le script de prix
+      - name: Lancer le script EA FC 27
         env:
           EMAIL_ADRESSE: ${{ secrets.EMAIL_ADRESSE }}
           EMAIL_MDP: ${{ secrets.EMAIL_MDP }}
+          TELEGRAM_USER: ${{ secrets.TELEGRAM_USER }}
         run: python fc27_tracker.py
+
+      - name: Lancer le script MW4
+        env:
+          EMAIL_ADRESSE: ${{ secrets.EMAIL_ADRESSE }}
+          EMAIL_MDP: ${{ secrets.EMAIL_MDP }}
+          TELEGRAM_USER: ${{ secrets.TELEGRAM_USER }}
+        run: python mw4_tracker.py
+
+      - name: Sauvegarder la memoire horaire des prix
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add memoire_*.json || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Mise a jour memoire horaire" && git push)
