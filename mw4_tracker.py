@@ -58,7 +58,7 @@ def passer_appel_telegram(prix):
         print(f"📞 Appel Telegram déclenché vers {user} !")
     except Exception as e:
         print(f"⚠️ Erreur lors de l'appel Telegram : {e}")
-
+        
 def extraire_meilleur_prix():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -66,29 +66,20 @@ def extraire_meilleur_prix():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             locale="fr-FR"
         )
-        
-        # On tente jusqu'à 2 fois avec blocage des pubs et images pour aller vite
-        for tentative in range(1, 3):
-            page = context.new_page()
+        page = context.new_page()
+        try:
+            page.goto(URL_PRODUIT, wait_until="load", timeout=45000)
+        except Exception:
             try:
-                page.route("**/*", lambda route: route.abort() 
-                           if route.request.resource_type in ["image", "media", "font"] 
-                           else route.continue_())
-
-                page.goto(URL_PRODUIT, wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(6000)
-                
-                html = page.content()
-                texte = page.inner_text("body")
-                page.close()
-                break
+                page.goto(URL_PRODUIT, wait_until="commit", timeout=30000)
             except Exception as e:
-                print(f"⚠️ Essai {tentative}/2 échoué sur MW4 : {e}")
-                page.close()
-                if tentative == 2:
-                    browser.close()
-                    return None
+                print(f"⚠️ Erreur critique de chargement sur MW4 : {e}")
+                browser.close()
+                return None
 
+        page.wait_for_timeout(5000)
+        html = page.content()
+        texte = page.inner_text("body")
         browser.close()
 
     if "MERCHANT" in texte:
