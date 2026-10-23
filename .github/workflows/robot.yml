@@ -53,6 +53,8 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git stash || true
           git pull origin main --rebase || true
+          git stash pop || true
           git add memoire_*.json || true
           git diff --quiet && git diff --staged --quiet || (git commit -m "Mise a jour memoire horaire" && git push)
