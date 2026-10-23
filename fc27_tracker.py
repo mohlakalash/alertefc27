@@ -13,7 +13,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 URL_PRODUIT = "https://www.allkeyshop.com/blog/buy-ea-sports-fc-27-steam-account-compare-prices/"
-SEUIL_APPEL = 30.00  # 📞 Déclenche le message Telegram immédiatement si le prix est <= à ce montant
+SEUIL_APPEL = 22.00  # 📞 Déclenche le message Telegram immédiatement si le prix est <= à ce montant
 FICHIER_MEMOIRE = "memoire_fc27.json"
 
 def envoyer_email_recap(prix_min, releves):
