@@ -13,7 +13,7 @@ EMAIL_MDP = os.environ.get("EMAIL_MDP")
 TELEGRAM_USER = os.environ.get("TELEGRAM_USER")
 
 URL_PRODUIT = "https://www.allkeyshop.com/blog/buy-ea-sports-fc-27-steam-account-compare-prices/"
-SEUIL_APPEL = 25.00  # 📞 Déclenche l'appel Telegram immédiatement si le prix est <= à ce montant
+SEUIL_APPEL = 30.00  # 📞 Déclenche l'appel Telegram immédiatement si le prix est <= à ce montant
 FICHIER_MEMOIRE = "memoire_fc27.json"
 
 def envoyer_email_recap(prix_min, releves):
