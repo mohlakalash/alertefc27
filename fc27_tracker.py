@@ -1,63 +1,82 @@
 import os
 import re
+import json
 import smtplib
+import urllib.parse
+import requests
+from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
 from playwright.sync_api import sync_playwright
 
 EMAIL_ADRESSE = os.environ.get("EMAIL_ADRESSE")
 EMAIL_MDP = os.environ.get("EMAIL_MDP")
+TELEGRAM_USER = os.environ.get("TELEGRAM_USER")
 
-URL_FC27 = "https://www.allkeyshop.com/blog/buy-ea-sports-fc-27-steam-account-compare-prices/"
-URL_MW4 = "https://www.allkeyshop.com/blog/buy-call-of-duty-modern-warfare-4-steam-account-compare-prices/"
+URL_PRODUIT = "https://www.allkeyshop.com/blog/buy-ea-sports-fc-27-steam-account-compare-prices/"
+SEUIL_APPEL = 25.00  # 📞 Déclenche l'appel Telegram immédiatement si le prix est <= à ce montant
+FICHIER_MEMOIRE = "memoire_fc27.json"
 
-def envoyer_email(prix_fc27, prix_mw4):
+def envoyer_email_recap(prix_min, releves):
     if not EMAIL_ADRESSE or not EMAIL_MDP:
-        print("⚠️ Erreur : EMAIL_ADRESSE ou EMAIL_MDP manquant dans Settings > Secrets.")
+        print("⚠️ Erreur : EMAIL_ADRESSE ou EMAIL_MDP manquant.")
         return
 
-    str_fc27 = f"{prix_fc27:.2f} €" if prix_fc27 else "N/A"
-    str_mw4 = f"{prix_mw4:.2f} €" if prix_mw4 else "N/A"
+    lignes_detail = "\n".join([f"- {r['heure']} : {r['prix']:.2f} €" for r in releves])
 
     msg = EmailMessage()
-    msg["Subject"] = f"github - eafc 27 : {str_fc27} / MW4 : {str_mw4}"
+    msg["Subject"] = f"ea fc 27 : {prix_min:.2f} euros"
     msg["From"] = EMAIL_ADRESSE.strip()
     msg["To"] = EMAIL_ADRESSE.strip()
     msg.set_content(
         f"Bonjour,\n\n"
-        f"Voici les meilleurs prix actuels relevés :\n\n"
-        f"⚽ EA SPORTS FC 27 (Compte Steam) : {str_fc27}\n"
-        f"Lien : {URL_FC27}\n\n"
-        f"🎮 Call of Duty Modern Warfare 4 (Compte Steam) : {str_mw4}\n"
-        f"Lien : {URL_MW4}"
+        f"Voici le récapitulatif de l'heure écoulée pour EA SPORTS FC 27 (Compte Steam) :\n\n"
+        f"🏆 Prix minimum observé sur l'heure : {prix_min:.2f} €\n\n"
+        f"📊 Détail des relevés (toutes les 5 min) :\n{lignes_detail}\n\n"
+        f"Lien direct vers l'offre :\n{URL_PRODUIT}"
     )
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(EMAIL_ADRESSE.strip(), EMAIL_MDP.replace(" ", "").strip())
         smtp.send_message(msg)
-    print(f"📧 E-mail envoyé avec succès à {EMAIL_ADRESSE} !")
+    print(f"📧 E-mail récapitulatif horaire FC 27 envoyé (Min : {prix_min:.2f} €) !")
 
-def analyser_page(context, url):
-    # On tente jusqu'à 2 fois par page en cas de blocage passager du serveur
-    for tentative in range(1, 3):
+def passer_appel_telegram(prix):
+    if not TELEGRAM_USER:
+        print("⚠️ TELEGRAM_USER non configuré dans les Secrets.")
+        return
+
+    user = TELEGRAM_USER.strip()
+    if not user.startswith("@"):
+        user = "@" + user
+
+    message = f"Alerte prix ! Le jeu EA Sports FC 27 est descendu à {prix:.2f} euros."
+    texte_encode = urllib.parse.quote(message)
+    url_appel = f"http://api.callmebot.com/start.php?user={user}&text={texte_encode}&lang=fr-FR-Standard-A&rpt=2"
+
+    try:
+        requests.get(url_appel, timeout=15)
+        print(f"📞 Appel Telegram déclenché vers {user} !")
+    except Exception as e:
+        print(f"⚠️ Erreur lors de l'appel Telegram : {e}")
+
+def extraire_meilleur_prix():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            locale="fr-FR"
+        )
         page = context.new_page()
         try:
-            # On bloque les images, polices et médias lourds pour accélérer le chargement
-            page.route("**/*", lambda route: route.abort() 
-                       if route.request.resource_type in ["image", "media", "font"] 
-                       else route.continue_())
-
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(6000)
-            
+            page.goto(URL_PRODUIT, wait_until="commit", timeout=60000)
+            page.wait_for_timeout(8000)
             html = page.content()
             texte = page.inner_text("body")
-            page.close()
-            break
         except Exception as e:
-            print(f"⚠️ Essai {tentative}/2 échoué sur {url} : {e}")
-            page.close()
-            if tentative == 2:
-                return None
+            print(f"⚠️ Temps d'attente dépassé ou erreur : {e}")
+            browser.close()
+            return None
+        browser.close()
 
     if "MERCHANT" in texte:
         texte = texte.split("MERCHANT", 1)[1]
@@ -83,25 +102,43 @@ def analyser_page(context, url):
 
     return min(prix_trouves) if prix_trouves else None
 
-def extraire_tous_les_prix():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-            locale="fr-FR"
-        )
-        
-        prix_fc27 = analyser_page(context, URL_FC27)
-        prix_mw4 = analyser_page(context, URL_MW4)
-        
-        browser.close()
-        
-    return prix_fc27, prix_mw4
+def gerer_memoire_et_envoi(prix):
+    # Fuseau horaire France (UTC+2 / UTC+1)
+    maintenant = datetime.now(timezone(timedelta(hours=2)))
+    heure_actuelle = maintenant.strftime("%Y-%m-%d %H:00")
+    heure_minute = maintenant.strftime("%H:%M")
+
+    donnees = {"heure_ref": heure_actuelle, "releves": []}
+    if os.path.exists(FICHIER_MEMOIRE):
+        try:
+            with open(FICHIER_MEMOIRE, "r", encoding="utf-8") as f:
+                donnees = json.load(f)
+        except Exception:
+            pass
+
+    # Si on a changé d'heure (ou atteint 12 relevés) et qu'on a des prix en mémoire, on envoie le récap !
+    if (donnees["heure_ref"] != heure_actuelle or len(donnees["releves"]) >= 12) and donnees["releves"]:
+         donnees["releves"].append({"heure": heure_minute, "prix": prix})
+         prix_min = min(r["prix"] for r in donnees["releves"])
+         envoyer_email_recap(prix_min, donnees["releves"])
+         # On réinitialise la mémoire pour la nouvelle heure qui commence
+         donnees = {"heure_ref": heure_actuelle, "releves": []}
+    else:
+        donnees["releves"].append({"heure": heure_minute, "prix": prix})
+        print(f"📝 Prix mémorisé ({len(donnees['releves'])}/12 pour l'heure en cours). Prochain mail au changement d'heure.")
+
+    with open(FICHIER_MEMOIRE, "w", encoding="utf-8") as f:
+        json.dump(donnees, f)
 
 if __name__ == "__main__":
-    prix_fc27, prix_mw4 = extraire_tous_les_prix()
-    if prix_fc27 or prix_mw4:
-        print(f"✅ Prix relevés -> FC 27 : {prix_fc27} € | MW4 : {prix_mw4} €")
-        envoyer_email(prix_fc27, prix_mw4)
+    prix = extraire_meilleur_prix()
+    if prix:
+        print(f"✅ Prix FC 27 relevé : {prix:.2f} €")
+        # 1. Vérification immédiate pour l'appel Telegram (toutes les 5 min)
+        if prix <= SEUIL_APPEL:
+            print(f"🚨 Seuil atteint ({prix:.2f} € <= {SEUIL_APPEL:.2f} €) ! Appel Telegram immédiat...")
+            passer_appel_telegram(prix)
+        # 2. Enregistrement pour l'e-mail récapitulatif (1 fois par heure)
+        gerer_memoire_et_envoi(prix)
     else:
-        print("⚠️ Aucun prix détecté sur les pages.")
+        print("⚠️ Aucun prix détecté sur la page FC 27.")
