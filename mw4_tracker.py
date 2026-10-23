@@ -66,17 +66,29 @@ def extraire_meilleur_prix():
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
             locale="fr-FR"
         )
-        page = context.new_page()
-        try:
-            # On utilise "commit" et un timeout de 60s pour éviter tout blocage réseau
-            page.goto(URL_PRODUIT, wait_until="commit", timeout=60000)
-            page.wait_for_timeout(8000)
-            html = page.content()
-            texte = page.inner_text("body")
-        except Exception as e:
-            print(f"⚠️ Temps d'attente dépassé ou erreur sur MW4 : {e}")
-            browser.close()
-            return None
+        
+        # On tente jusqu'à 2 fois avec blocage des pubs et images pour aller vite
+        for tentative in range(1, 3):
+            page = context.new_page()
+            try:
+                page.route("**/*", lambda route: route.abort() 
+                           if route.request.resource_type in ["image", "media", "font"] 
+                           else route.continue_())
+
+                page.goto(URL_PRODUIT, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(6000)
+                
+                html = page.content()
+                texte = page.inner_text("body")
+                page.close()
+                break
+            except Exception as e:
+                print(f"⚠️ Essai {tentative}/2 échoué sur MW4 : {e}")
+                page.close()
+                if tentative == 2:
+                    browser.close()
+                    return None
+
         browser.close()
 
     if "MERCHANT" in texte:
