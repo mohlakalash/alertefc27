@@ -18,10 +18,22 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Installer le navigateur Playwright
+      - name: Installer le navigateur Playwright avec Cache
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Installer Playwright si absent
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: |
           pip install playwright requests
           playwright install chromium --with-deps
+        
+      - name: Installer uniquement les dependances Python si cache actif
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pip install playwright requests
 
       - name: Lancer le script EA FC 27
         env:
@@ -41,5 +53,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git pull origin main --rebase || true
           git add memoire_*.json || true
           git diff --quiet && git diff --staged --quiet || (git commit -m "Mise a jour memoire horaire" && git push)
