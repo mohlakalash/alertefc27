@@ -1,1 +1,5 @@
+<<<<<<< Updated upstream
 {"heure_ref": "2026-10-26 17:00", "releves": [{"heure": "17:10", "prix": 27.12}, {"heure": "17:16", "prix": 27.12}]}
+=======
+{"heure_ref": "2026-10-26 17:00", "releves": [{"heure": "17:19", "prix": 27.12}]}
+>>>>>>> Stashed changes
